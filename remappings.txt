@@ -1,0 +1,5 @@
+@openzeppelin/contracts/=lib/openzeppelin-contracts-upgradeable/lib/openzeppelin-contracts/contracts/
+@openzeppelin/contracts-upgradeable/=lib/openzeppelin-contracts-upgradeable/contracts/
+@openzeppelin-v5/contracts/access/=lib/openzeppelin-contracts/contracts/access
+@openzeppelin-v5/contracts/token/=lib/openzeppelin-contracts/contracts/token
+@openzeppelin-v5/contracts/utils/=lib/openzeppelin-contracts/contracts/utils

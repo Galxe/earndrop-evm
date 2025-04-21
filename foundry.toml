@@ -1,0 +1,39 @@
+[profile.default]
+src = "src"
+libs = ["lib"]
+solc = "0.8.24"
+ffi = true
+ast = true
+build_info = true
+via_ir = true
+extra_output = ["storageLayout"]
+fs_permissions = [
+    { access = "read", path = "./out" },
+    { access = "read-write", path = "./deployments" },
+]
+
+# See more config options https://github.com/foundry-rs/foundry/blob/master/crates/config/README.md#all-options
+
+[fmt]
+sort_imports = true
+tab_width = 2
+
+[rpc_endpoints]
+mainnet = "${RPC_MAINNET}"
+sepolia = "${RPC_SEPOLIA}"
+bsc = "${RPC_BSC}"
+bsc_testnet = "${RPC_BSC_TESTNET}"
+gravity-alpha-mainnet = "${RPC_GRAVITY_ALPHA_MAINNET}"
+gravity_alpha_testnet_sepolia = "${RPC_GRAVITY_ALPHA_TESTNET_SEPOLIA}"
+base = "${RPC_BASE}"
+arbitrum = "${RPC_ARBITRUM}"
+sei = "${RPC_SEI_EVM}"
+
+[etherscan]
+mainnet = { key = "${ETHERSCAN_API_KEY_MAINNET}", url = "${ETHERSCAN_API_URL_MAINNET}" }
+sepolia = { key = "${ETHERSCAN_API_KEY_SEPOLIA}", url = "${ETHERSCAN_API_URL_SEPOLIA}" }
+bsc = { key = "${ETHERSCAN_API_KEY_BSC}", url = "${ETHERSCAN_API_URL_BSC}" }
+bsc_testnet = { key = "${ETHERSCAN_API_KEY_BSC_TESTNET}", url = "${ETHERSCAN_API_URL_BSC_TESTNET}" }
+gravity-alpha-mainnet = { key = "no-op", chain = "1625", url = "https://explorer.gravity.xyz/api" }
+gravity_alpha_testnet_sepolia = { key = "", chain = "13505", url = "${ETHERSCAN_API_URL_GRAVITY_ALPHA_TESTNET_SEPOLIA}" }
+base = { key = "${ETHERSCAN_API_KEY_BASE}", url = "${ETHERSCAN_API_URL_BASE}" }
