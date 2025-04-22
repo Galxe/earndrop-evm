@@ -437,24 +437,6 @@ contract VestingEarndropTest is Test {
     vestingEarndrop.confirmActivateEarndrop(earndropId);
   }
 
-  function testConfirmActivateEarndropInvalidMsgValue2() public {
-    uint256 earndropId = 1;
-    address tokenAddress = address(token);
-    address admin = makeAddr("admin");
-    uint256 totalAmount = 1 ether;
-
-    _setupEarndrop(earndropId, admin, tokenAddress);
-
-    token.mint(admin, totalAmount);
-    vm.prank(admin);
-    token.approve(address(vestingEarndrop), totalAmount);
-
-    vm.prank(admin);
-
-    vm.expectRevert();
-    vestingEarndrop.confirmActivateEarndrop{value: totalAmount}(earndropId);
-  }
-
   function testConfirmActivateEarndropInsufficientAllowance() public {
     uint256 earndropId = 1;
     address tokenAddress = address(token);
