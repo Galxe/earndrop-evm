@@ -44,6 +44,8 @@ contract VestingEarndrop is Ownable2Step, EIP712 {
     address tokenAddress;
     uint96 earndropId;
     bool revoked;
+    bool pendingRevoke;
+    bool confirmed;
     bytes32 merkleTreeRoot;
     uint256 totalAmount;
     uint256 claimedAmount;
@@ -63,13 +65,14 @@ contract VestingEarndrop is Ownable2Step, EIP712 {
   address public treasurer;
   mapping(uint256 => Earndrop) public earndrops;
   mapping(uint256 => mapping(uint256 => bool)) private claimed;
-  mapping(uint256 => Stage) private globalStages;
 
   event EarndropActivated(
     uint256 earndropId, address tokenAddress, bytes32 merkleTreeRoot, uint256 totalAmount, Stage[] stages, address admin
   );
+  event EarndropConfirmed(uint256 earndropId, address admin, uint256 totalAmount);
+  event EarndropRevokeRequested(uint256 earndropId, address admin);
   event EarndropRevoked(uint256 earndropId, address recipient, uint256 remainingAmount);
-
+  event EarndropRevokeCancelled(uint256 earndropId, address admin);
   event EarndropClaimed(
     uint256 indexed earndropId,
     uint256 indexed stageId,
@@ -78,6 +81,7 @@ contract VestingEarndrop is Ownable2Step, EIP712 {
     uint256 amount,
     uint256 value
   );
+  event EarndropAdminTransferred(uint256 earndropId, address indexed previousAdmin, address indexed newAdmin);
 
   constructor(address _owner, address _signer, address _treasurer)
     Ownable(_owner)
@@ -104,14 +108,25 @@ contract VestingEarndrop is Ownable2Step, EIP712 {
     treasurer = _treasurer;
   }
 
+  /**
+   * @dev Activates a new Earndrop.
+   * @param earndropId The unique ID of the Earndrop.
+   * @param tokenAddress The address of the token to be distributed.
+   * @param admin The admin address responsible for managing the Earndrop.
+   * @param merkleTreeRoot The Merkle tree root for claim verification.
+   * @param totalAmount The total amount of tokens for the Earndrop.
+   * @param _stagesArray The array of stages for the Earndrop.
+   * @param _signature The signature for activation verification.
+   */
   function activateEarndrop(
     uint256 earndropId,
     address tokenAddress,
+    address admin,
     bytes32 merkleTreeRoot,
     uint256 totalAmount,
     Stage[] calldata _stagesArray,
     bytes calldata _signature
-  ) external payable {
+  ) external {
     if (earndropId > type(uint96).max) {
       revert InvalidParameter("earndropId too large");
     }
@@ -141,15 +156,15 @@ contract VestingEarndrop is Ownable2Step, EIP712 {
         revert InvalidParameter("Stage startTime must be greater than current time");
       }
 
-      if (globalStages[_stagesArray[i].stageId].stageId != 0) {
-        revert InvalidParameter("Duplicate stageId found");
+      if (earndrop.stages[_stagesArray[i].stageId].stageId != 0) {
+        revert InvalidParameter("Duplicate stageId found in the same Earndrop");
       }
 
-      globalStages[_stagesArray[i].stageId] = _stagesArray[i];
+      earndrop.stages[_stagesArray[i].stageId] = _stagesArray[i];
     }
 
     bool isVerified = _verifySignature(
-      _hashEarndropActivate(earndropId, tokenAddress, merkleTreeRoot, totalAmount, _stagesArray, msg.sender), _signature
+      _hashEarndropActivate(earndropId, tokenAddress, merkleTreeRoot, totalAmount, _stagesArray, admin), _signature
     );
     if (!isVerified) {
       revert InvalidParameter("Invalid signature");
@@ -159,37 +174,62 @@ contract VestingEarndrop is Ownable2Step, EIP712 {
     earndrop.tokenAddress = tokenAddress;
     earndrop.merkleTreeRoot = merkleTreeRoot;
     earndrop.totalAmount = totalAmount;
-    earndrop.admin = msg.sender;
-    for (uint256 i = 0; i < _stagesArray.length; i++) {
-      earndrop.stages[_stagesArray[i].stageId] = _stagesArray[i];
-    }
+    earndrop.admin = admin;
 
-    if (tokenAddress == address(0)) {
-      if (msg.value != totalAmount) {
-        revert InvalidParameter("Invalid amount");
-      }
-    } else {
-      IERC20(tokenAddress).safeTransferFrom(msg.sender, address(this), totalAmount);
-    }
-
-    emit EarndropActivated(earndropId, tokenAddress, merkleTreeRoot, totalAmount, _stagesArray, msg.sender);
+    emit EarndropActivated(earndropId, tokenAddress, merkleTreeRoot, totalAmount, _stagesArray, admin);
   }
 
-  function getEarndropStage(uint256 earndropId, uint256 stageId) external view returns (Stage memory) {
+  function confirmActivateEarndrop(uint256 earndropId) external payable {
     Earndrop storage earndrop = earndrops[earndropId];
     if (earndrop.earndropId == 0) {
       revert InvalidParameter("Earndrop does not exist");
     }
-
-    Stage memory stage = earndrop.stages[stageId];
-    if (stage.stageId == 0) {
-      revert InvalidParameter("Stage does not exist");
+    if (earndrop.revoked) {
+      revert InvalidParameter("Earndrop revoked");
+    }
+    if (earndrop.confirmed) {
+      revert InvalidParameter("Earndrop already confirmed");
+    }
+    if (msg.sender != earndrop.admin) {
+      revert Unauthorized();
     }
 
-    return stage;
+    if (earndrop.tokenAddress == address(0)) {
+      if (msg.value != earndrop.totalAmount) {
+        revert InvalidParameter("Invalid amount");
+      }
+    } else {
+      IERC20(earndrop.tokenAddress).safeTransferFrom(msg.sender, address(this), earndrop.totalAmount);
+    }
+
+    earndrop.confirmed = true;
+
+    emit EarndropConfirmed(earndropId, msg.sender, earndrop.totalAmount);
   }
 
-  function revokeEarndrop(uint256 earndropId, address _recipient) external {
+  /**
+   * @dev Transfers the admin role of an Earndrop to a new address.
+   * @param earndropId The unique ID of the Earndrop.
+   * @param newAdmin The address of the new admin.
+   */
+  function transferEarndropAdmin(uint256 earndropId, address newAdmin) external {
+    Earndrop storage earndrop = earndrops[earndropId];
+    if (earndrop.earndropId == 0) {
+      revert InvalidParameter("Earndrop does not exist");
+    }
+    if (msg.sender != earndrop.admin) {
+      revert Unauthorized();
+    }
+    if (newAdmin == address(0)) {
+      revert InvalidParameter("New admin cannot be the zero address");
+    }
+
+    earndrop.admin = newAdmin;
+
+    emit EarndropAdminTransferred(earndropId, msg.sender, newAdmin);
+  }
+
+  function revokeEarndrop(uint256 earndropId) external {
     Earndrop storage earndrop = earndrops[earndropId];
     if (earndrop.earndropId == 0) {
       revert InvalidParameter("Earndrop does not exist");
@@ -201,20 +241,68 @@ contract VestingEarndrop is Ownable2Step, EIP712 {
       revert Unauthorized();
     }
 
+    earndrop.pendingRevoke = true;
+    emit EarndropRevokeRequested(earndropId, msg.sender);
+  }
+
+  /**
+   * @dev Cancels a pending revoke request for an Earndrop.
+   * @param earndropId The unique ID of the Earndrop.
+   */
+  function cancelRevokeEarndrop(uint256 earndropId) external {
+    Earndrop storage earndrop = earndrops[earndropId];
+    if (earndrop.earndropId == 0) {
+      revert InvalidParameter("Earndrop does not exist");
+    }
+    if (!earndrop.pendingRevoke) {
+      revert InvalidParameter("No pending revoke request");
+    }
+    if (msg.sender != earndrop.admin) {
+      revert Unauthorized();
+    }
+
+    earndrop.pendingRevoke = false;
+
+    emit EarndropRevokeCancelled(earndropId, msg.sender);
+  }
+
+  /**
+   * @dev Confirms the activation of an Earndrop by transferring funds.
+   * @param earndropId The unique ID of the Earndrop.
+   */
+  function confirmRevokeEarndrop(uint256 earndropId) external onlyOwner {
+    Earndrop storage earndrop = earndrops[earndropId];
+    if (earndrop.earndropId == 0) {
+      revert InvalidParameter("Earndrop does not exist");
+    }
+    if (earndrop.revoked) {
+      revert InvalidParameter("Earndrop already revoked");
+    }
+    if (!earndrop.pendingRevoke) {
+      revert InvalidParameter("No pending revoke request");
+    }
+    if (!earndrop.confirmed) {
+      revert InvalidParameter("Earndrop not confirmed");
+    }
+
     earndrop.revoked = true;
+    earndrop.pendingRevoke = false;
 
     uint256 remainingAmount = earndrop.totalAmount - earndrop.claimedAmount;
     if (remainingAmount > 0) {
-      _processTransfer(earndrop.tokenAddress, _recipient, remainingAmount);
+      _processTransfer(earndrop.tokenAddress, earndrop.admin, remainingAmount);
     }
 
-    emit EarndropRevoked(earndropId, _recipient, remainingAmount);
+    emit EarndropRevoked(earndropId, earndrop.admin, remainingAmount);
   }
 
   function claimEarndrop(uint256 earndropId, ClaimParams calldata params, bytes calldata _signature) external payable {
     Earndrop storage earndrop = earndrops[earndropId];
     if (earndrop.earndropId == 0) {
       revert InvalidParameter("Earndrop does not exist");
+    }
+    if (!earndrop.confirmed) {
+      revert InvalidParameter("Earndrop not confirmed");
     }
     if (earndrop.revoked) {
       revert InvalidParameter("Earndrop revoked");
@@ -268,6 +356,9 @@ contract VestingEarndrop is Ownable2Step, EIP712 {
     if (earndrop.earndropId == 0) {
       revert InvalidParameter("Earndrop does not exist");
     }
+    if (!earndrop.confirmed) {
+      revert InvalidParameter("Earndrop not confirmed");
+    }
     if (earndrop.revoked) {
       revert InvalidParameter("Earndrop revoked");
     }
@@ -310,6 +401,20 @@ contract VestingEarndrop is Ownable2Step, EIP712 {
 
   function isClaimed(uint256 earndropId, uint256 leafIndex) external view returns (bool) {
     return claimed[earndropId][leafIndex];
+  }
+
+  function getEarndropStage(uint256 earndropId, uint256 stageId) external view returns (Stage memory) {
+    Earndrop storage earndrop = earndrops[earndropId];
+    if (earndrop.earndropId == 0) {
+      revert InvalidParameter("Earndrop does not exist");
+    }
+
+    Stage memory stage = earndrop.stages[stageId];
+    if (stage.stageId == 0) {
+      revert InvalidParameter("Stage does not exist");
+    }
+
+    return stage;
   }
 
   function _validateStage(Stage memory stage) private view {
