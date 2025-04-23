@@ -388,7 +388,7 @@ contract VestingEarndropTest is Test {
     vestingEarndrop.revokeEarndrop(earndropId, recipient);
 
     vm.prank(admin);
-    vm.expectRevert(abi.encodeWithSelector(VestingEarndrop.InvalidParameter.selector, "Earndrop revoked"));
+    vm.expectRevert(abi.encodeWithSelector(VestingEarndrop.InvalidParameter.selector, "Earndrop already revoked"));
     vestingEarndrop.confirmActivateEarndrop(earndropId);
   }
 
@@ -783,7 +783,7 @@ contract VestingEarndropTest is Test {
 
     bytes32[] memory merkleProof = new bytes32[](0);
     bytes memory claimSignature = "";
-    vm.expectRevert(abi.encodeWithSelector(VestingEarndrop.InvalidParameter.selector, "Earndrop revoked"));
+    vm.expectRevert(abi.encodeWithSelector(VestingEarndrop.InvalidParameter.selector, "Earndrop already revoked"));
     vestingEarndrop.claimEarndrop(
       earndropId,
       VestingEarndrop.ClaimParams({
