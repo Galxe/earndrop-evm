@@ -326,6 +326,9 @@ contract VestingEarndrop is Ownable2Step, EIP712 {
 
     claimed[earndropId][params.leafIndex] = true;
     earndrop.claimedAmount += params.amount;
+    if (earndrop.claimedAmount > earndrop.totalAmount) {
+      revert InvalidParameter("Claimed amount exceeds total amount");
+    }
 
     // transfer claimFee to treasurer
     if (msg.value > 0) {
@@ -373,6 +376,9 @@ contract VestingEarndrop is Ownable2Step, EIP712 {
 
     for (uint256 i = 0; i < params.length; i++) {
       ClaimParams calldata claim = params[i];
+      if (claim.account != params[0].account) {
+        revert InvalidParameter("Invalid account");
+      }
 
       if (claim.stageIndex >= earndrop.stages.length) {
         revert InvalidParameter("Invalid stage index");
@@ -392,6 +398,9 @@ contract VestingEarndrop is Ownable2Step, EIP712 {
 
       claimed[earndropId][claim.leafIndex] = true;
       earndrop.claimedAmount += claim.amount;
+      if (earndrop.claimedAmount > earndrop.totalAmount) {
+        revert InvalidParameter("Claimed amount exceeds total amount");
+      }
 
       _processTransfer(earndrop.tokenAddress, claim.account, claim.amount);
 
