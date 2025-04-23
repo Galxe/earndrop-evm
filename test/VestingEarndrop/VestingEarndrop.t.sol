@@ -463,6 +463,53 @@ contract VestingEarndropTest is Test {
     vestingEarndrop.confirmActivateEarndrop(earndropId);
   }
 
+  function testRevokeEarndropAllStagesEnded() public {
+    uint256 earndropId = 1;
+    address admin = makeAddr("admin");
+    address recipient = makeAddr("recipient");
+    uint256 totalAmount = 1 ether;
+
+    _setupEarndrop(earndropId, admin, address(token));
+
+    token.mint(admin, totalAmount);
+    vm.prank(admin);
+    token.approve(address(vestingEarndrop), totalAmount);
+
+    vm.prank(admin);
+    vestingEarndrop.confirmActivateEarndrop(earndropId);
+
+    vm.warp(block.timestamp + 7201);
+
+    vm.prank(admin);
+    vestingEarndrop.revokeEarndrop(earndropId, recipient);
+
+    (,, bool revoked,,,,,,) = vestingEarndrop.earndrops(earndropId);
+    assertTrue(revoked, "Earndrop should be revoked");
+    assertEq(token.balanceOf(recipient), totalAmount, "Recipient should receive the remaining tokens");
+  }
+
+  function testRevokeEarndropStagesNotEndedAndNotRevocable() public {
+    uint256 earndropId = 1;
+    address admin = makeAddr("admin");
+    address recipient = makeAddr("recipient");
+    uint256 totalAmount = 1 ether;
+
+    _setupEarndrop(earndropId, admin, address(token));
+
+    token.mint(admin, totalAmount);
+    vm.prank(admin);
+    token.approve(address(vestingEarndrop), totalAmount);
+
+    vm.prank(admin);
+    vestingEarndrop.confirmActivateEarndrop(earndropId);
+
+    vm.warp(block.timestamp + 3600);
+
+    vm.prank(admin);
+    vm.expectRevert(abi.encodeWithSelector(VestingEarndrop.InvalidParameter.selector, "Earndrop is not revocable"));
+    vestingEarndrop.revokeEarndrop(earndropId, recipient);
+  }
+
   function testRevokeEarndropSuccess() public {
     uint256 earndropId = 1;
     uint256 totalAmount = 1 ether;
@@ -486,7 +533,7 @@ contract VestingEarndropTest is Test {
 
     vestingEarndrop.revokeEarndrop(earndropId, recipient);
 
-    (,,, bool revoked,,,,,) = vestingEarndrop.earndrops(earndropId);
+    (,, bool revoked,,,,,,) = vestingEarndrop.earndrops(earndropId);
     assertTrue(revoked, "Earndrop should be revoked");
   }
 

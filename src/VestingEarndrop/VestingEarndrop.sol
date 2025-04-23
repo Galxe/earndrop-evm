@@ -264,9 +264,18 @@ contract VestingEarndrop is Ownable2Step, EIP712 {
     if (!earndrop.confirmed) {
       revert InvalidParameter("Earndrop not confirmed");
     }
-    if (!earndrop.revocable) {
+
+    bool allStagesEnded = true;
+    for (uint256 i = 0; i < earndrop.stages.length; i++) {
+      if (earndrop.stages[i].endTime >= block.timestamp) {
+        allStagesEnded = false;
+        break;
+      }
+    }
+    if (!allStagesEnded && !earndrop.revocable) {
       revert InvalidParameter("Earndrop is not revocable");
     }
+
     if (msg.sender != earndrop.admin) {
       revert Unauthorized();
     }
