@@ -35,21 +35,21 @@ contract VestingEarndrop is Ownable2Step, EIP712 {
   error TransferFailed();
 
   struct Stage {
-    uint256 startTime;
-    uint256 endTime;
+    uint48 startTime;
+    uint48 endTime;
   }
 
   struct Earndrop {
+    uint256 totalAmount;
+    uint256 claimedAmount;
+    bytes32 merkleTreeRoot;
     address tokenAddress;
+    address admin;
     uint96 earndropId;
     bool revoked;
     bool revocable;
     bool confirmed;
-    bytes32 merkleTreeRoot;
-    uint256 totalAmount;
-    uint256 claimedAmount;
     Stage[] stages;
-    address admin;
   }
 
   struct ClaimParams {
@@ -63,6 +63,11 @@ contract VestingEarndrop is Ownable2Step, EIP712 {
   address public signer;
   address public treasurer;
   mapping(uint256 => Earndrop) public earndrops;
+
+  // Mapping to track claimed status for each leaf in a Merkle tree of an Earndrop.
+  // The first key (uint256) represents the `earndropId`.
+  // The second key (uint256) represents the `leafIndex` in the Merkle tree.
+  // The value (bool) indicates whether the specific leaf has been claimed (true if claimed, false otherwise).
   mapping(uint256 => mapping(uint256 => bool)) private claimed;
 
   event EarndropActivated(

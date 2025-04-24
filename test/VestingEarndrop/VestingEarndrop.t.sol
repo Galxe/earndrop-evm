@@ -93,7 +93,7 @@ contract VestingEarndropTest is Test {
     vm.prank(owner);
     vestingEarndrop.setEarndropRevocable(earndropId, true);
 
-    (,,, bool revocable,,,,,) = vestingEarndrop.earndrops(earndropId);
+    (,,,,,,, bool revocable,) = vestingEarndrop.earndrops(earndropId);
     assertTrue(revocable, "Earndrop should be revocable");
   }
 
@@ -130,7 +130,7 @@ contract VestingEarndropTest is Test {
 
     vestingEarndrop.transferEarndropAdmin(earndropId, newAdmin);
 
-    (,,,,,,,, address admin) = vestingEarndrop.earndrops(earndropId);
+    (,,,, address admin,,,,) = vestingEarndrop.earndrops(earndropId);
     assertEq(admin, newAdmin);
   }
 
@@ -172,7 +172,8 @@ contract VestingEarndropTest is Test {
     uint256 totalAmount = 10 ether;
 
     VestingEarndrop.Stage[] memory stages = new VestingEarndrop.Stage[](1);
-    stages[0] = VestingEarndrop.Stage({startTime: block.timestamp + 3600, endTime: block.timestamp + 7200});
+    stages[0] =
+      VestingEarndrop.Stage({startTime: uint8(block.timestamp + 3600), endTime: uint48(block.timestamp + 7200)});
 
     bytes memory signature = "";
 
@@ -187,7 +188,8 @@ contract VestingEarndropTest is Test {
     bytes32 merkleTreeRoot = keccak256(abi.encodePacked("merkleRoot"));
     uint256 totalAmount = 10 ether;
     VestingEarndrop.Stage[] memory stages = new VestingEarndrop.Stage[](1);
-    stages[0] = VestingEarndrop.Stage({startTime: block.timestamp + 3600, endTime: block.timestamp + 7200});
+    stages[0] =
+      VestingEarndrop.Stage({startTime: uint48(block.timestamp + 3600), endTime: uint48(block.timestamp + 7200)});
     bytes memory signature = "";
     vm.expectRevert(abi.encodeWithSelector(VestingEarndrop.InvalidParameter.selector, "earndropId cannot be 0"));
     vestingEarndrop.activateEarndrop(earndropId, tokenAddress, admin, merkleTreeRoot, totalAmount, stages, signature);
@@ -200,7 +202,8 @@ contract VestingEarndropTest is Test {
     bytes32 merkleTreeRoot = keccak256(abi.encodePacked("merkleRoot"));
     uint256 totalAmount = 0;
     VestingEarndrop.Stage[] memory stages = new VestingEarndrop.Stage[](1);
-    stages[0] = VestingEarndrop.Stage({startTime: block.timestamp + 3600, endTime: block.timestamp + 7200});
+    stages[0] =
+      VestingEarndrop.Stage({startTime: uint48(block.timestamp + 3600), endTime: uint48(block.timestamp + 7200)});
     bytes memory signature = "";
     vm.expectRevert(abi.encodeWithSelector(VestingEarndrop.InvalidParameter.selector, "totalAmount cannot be 0"));
     vestingEarndrop.activateEarndrop(earndropId, tokenAddress, admin, merkleTreeRoot, totalAmount, stages, signature);
@@ -213,7 +216,7 @@ contract VestingEarndropTest is Test {
     bytes32 merkleTreeRoot = keccak256(abi.encodePacked("merkleRoot"));
     uint256 totalAmount = 1 ether;
     VestingEarndrop.Stage[] memory stages = new VestingEarndrop.Stage[](0);
-    // stages[0] = VestingEarndrop.Stage({stageId: 1, startTime: block.timestamp + 3600, endTime: block.timestamp + 7200});
+    // stages[0] = VestingEarndrop.Stage({stageId: 1, startTime: uint48(block.timestamp + 3600), endTime: uint48(block.timestamp + 7200)});
     bytes memory signature = "";
     vm.expectRevert(abi.encodeWithSelector(VestingEarndrop.InvalidParameter.selector, "Stages cannot be empty"));
     vestingEarndrop.activateEarndrop(earndropId, tokenAddress, admin, merkleTreeRoot, totalAmount, stages, signature);
@@ -226,7 +229,7 @@ contract VestingEarndropTest is Test {
     bytes32 merkleTreeRoot = keccak256(abi.encodePacked("merkleRoot"));
     uint256 totalAmount = 1 ether;
     VestingEarndrop.Stage[] memory stages = new VestingEarndrop.Stage[](1);
-    stages[0] = VestingEarndrop.Stage({startTime: block.timestamp + 3600, endTime: block.timestamp});
+    stages[0] = VestingEarndrop.Stage({startTime: uint48(block.timestamp + 3600), endTime: uint48(block.timestamp)});
     bytes memory signature = "";
     vm.expectRevert(
       abi.encodeWithSelector(VestingEarndrop.InvalidParameter.selector, "Stage startTime must be less than endTime")
@@ -241,7 +244,7 @@ contract VestingEarndropTest is Test {
     bytes32 merkleTreeRoot = keccak256(abi.encodePacked("merkleRoot"));
     uint256 totalAmount = 1 ether;
     VestingEarndrop.Stage[] memory stages = new VestingEarndrop.Stage[](1);
-    stages[0] = VestingEarndrop.Stage({startTime: block.timestamp, endTime: block.timestamp + 100});
+    stages[0] = VestingEarndrop.Stage({startTime: uint48(block.timestamp), endTime: uint48(block.timestamp + 100)});
     bytes memory signature = "";
     vm.expectRevert(
       abi.encodeWithSelector(
@@ -258,8 +261,8 @@ contract VestingEarndropTest is Test {
     bytes32 merkleTreeRoot = keccak256(abi.encodePacked("merkleRoot"));
     uint256 totalAmount = 1 ether;
     VestingEarndrop.Stage[] memory stages = new VestingEarndrop.Stage[](2);
-    stages[0] = VestingEarndrop.Stage({startTime: block.timestamp + 50, endTime: block.timestamp + 100});
-    stages[1] = VestingEarndrop.Stage({startTime: block.timestamp + 20, endTime: block.timestamp + 100});
+    stages[0] = VestingEarndrop.Stage({startTime: uint48(block.timestamp + 50), endTime: uint48(block.timestamp + 100)});
+    stages[1] = VestingEarndrop.Stage({startTime: uint48(block.timestamp + 20), endTime: uint48(block.timestamp + 100)});
     bytes memory signature = "";
     vm.expectRevert(
       abi.encodeWithSelector(
@@ -276,7 +279,8 @@ contract VestingEarndropTest is Test {
     bytes32 merkleTreeRoot = keccak256(abi.encodePacked("merkleRoot"));
     uint256 totalAmount = 1 ether;
     VestingEarndrop.Stage[] memory stages = new VestingEarndrop.Stage[](1);
-    stages[0] = VestingEarndrop.Stage({startTime: block.timestamp + 3600, endTime: block.timestamp + 7200});
+    stages[0] =
+      VestingEarndrop.Stage({startTime: uint48(block.timestamp + 3600), endTime: uint48(block.timestamp + 7200)});
 
     address invalidAddress = makeAddr("invalidAddress");
 
@@ -298,7 +302,8 @@ contract VestingEarndropTest is Test {
     uint256 totalAmount = 1 ether;
 
     VestingEarndrop.Stage[] memory stages = new VestingEarndrop.Stage[](1);
-    stages[0] = VestingEarndrop.Stage({startTime: block.timestamp + 3600, endTime: block.timestamp + 7200});
+    stages[0] =
+      VestingEarndrop.Stage({startTime: uint48(block.timestamp + 3600), endTime: uint48(block.timestamp + 7200)});
 
     bytes32 messageHash = _hashEarndropActivate(earndropId, tokenAddress, merkleTreeRoot, totalAmount, stages, admin);
 
@@ -310,7 +315,7 @@ contract VestingEarndropTest is Test {
 
     vestingEarndrop.activateEarndrop(earndropId, tokenAddress, admin, merkleTreeRoot, totalAmount, stages, signature);
 
-    (,,,,,,,, address earndropAdmin) = vestingEarndrop.earndrops(earndropId);
+    (,,,, address earndropAdmin,,,,) = vestingEarndrop.earndrops(earndropId);
     assertEq(earndropAdmin, admin);
 
     VestingEarndrop.Stage[] memory earndropStages = vestingEarndrop.getEarndropStages(earndropId);
@@ -351,7 +356,7 @@ contract VestingEarndropTest is Test {
     vm.prank(admin);
     vestingEarndrop.confirmActivateEarndrop(earndropId);
 
-    (,,,, bool confirmed,,,,) = vestingEarndrop.earndrops(earndropId);
+    (,,,,,,,, bool confirmed) = vestingEarndrop.earndrops(earndropId);
     assertTrue(confirmed, "Earndrop should be confirmed");
     assertEq(token.balanceOf(address(vestingEarndrop)), totalAmount, "Contract should hold the total amount of tokens");
   }
@@ -483,7 +488,7 @@ contract VestingEarndropTest is Test {
     vm.prank(admin);
     vestingEarndrop.revokeEarndrop(earndropId, recipient);
 
-    (,, bool revoked,,,,,,) = vestingEarndrop.earndrops(earndropId);
+    (,,,,,, bool revoked,,) = vestingEarndrop.earndrops(earndropId);
     assertTrue(revoked, "Earndrop should be revoked");
     assertEq(token.balanceOf(recipient), totalAmount, "Recipient should receive the remaining tokens");
   }
@@ -503,7 +508,7 @@ contract VestingEarndropTest is Test {
     vm.prank(admin);
     vestingEarndrop.confirmActivateEarndrop(earndropId);
 
-    vm.warp(block.timestamp + 3600);
+    vm.warp(uint48(block.timestamp + 3600));
 
     vm.prank(admin);
     vm.expectRevert(abi.encodeWithSelector(VestingEarndrop.InvalidParameter.selector, "Earndrop is not revocable"));
@@ -533,7 +538,7 @@ contract VestingEarndropTest is Test {
 
     vestingEarndrop.revokeEarndrop(earndropId, recipient);
 
-    (,, bool revoked,,,,,,) = vestingEarndrop.earndrops(earndropId);
+    (,,,,,, bool revoked,,) = vestingEarndrop.earndrops(earndropId);
     assertTrue(revoked, "Earndrop should be revoked");
   }
 
@@ -663,7 +668,8 @@ contract VestingEarndropTest is Test {
     vm.deal(claimer, 1 ether);
 
     VestingEarndrop.Stage[] memory stages = new VestingEarndrop.Stage[](1);
-    stages[0] = VestingEarndrop.Stage({startTime: block.timestamp + 3600, endTime: block.timestamp + 7200});
+    stages[0] =
+      VestingEarndrop.Stage({startTime: uint48(block.timestamp + 3600), endTime: uint48(block.timestamp + 7200)});
 
     token.mint(admin, totalAmount);
     vm.prank(admin);
@@ -908,7 +914,8 @@ contract VestingEarndropTest is Test {
     vm.deal(claimer, 1 ether);
 
     VestingEarndrop.Stage[] memory stages = new VestingEarndrop.Stage[](1);
-    stages[0] = VestingEarndrop.Stage({startTime: block.timestamp + 3600, endTime: block.timestamp + 7200});
+    stages[0] =
+      VestingEarndrop.Stage({startTime: uint48(block.timestamp + 3600), endTime: uint48(block.timestamp + 7200)});
 
     token.mint(admin, totalAmount);
     vm.prank(admin);
@@ -951,7 +958,8 @@ contract VestingEarndropTest is Test {
 
   function _setupEarndrop(uint256 earndropId, address admin, address _token) private {
     VestingEarndrop.Stage[] memory stages = new VestingEarndrop.Stage[](1);
-    stages[0] = VestingEarndrop.Stage({startTime: block.timestamp + 3600, endTime: block.timestamp + 7200});
+    stages[0] =
+      VestingEarndrop.Stage({startTime: uint48(block.timestamp + 3600), endTime: uint48(block.timestamp + 7200)});
 
     bytes32 merkleTreeRoot = keccak256(abi.encodePacked("merkleRoot"));
     uint256 totalAmount = 1 ether;
