@@ -44,8 +44,8 @@ contract VestingEarndrop is Ownable2Step, EIP712 {
     uint256 claimedAmount;
     bytes32 merkleTreeRoot;
     address tokenAddress;
-    address admin;
     uint96 earndropId;
+    address admin;
     bool revoked;
     bool revocable;
     bool confirmed;
@@ -62,13 +62,13 @@ contract VestingEarndrop is Ownable2Step, EIP712 {
 
   address public signer;
   address public treasurer;
-  mapping(uint256 => Earndrop) public earndrops;
+  mapping(uint256 id => Earndrop earndrop) public earndrops;
 
   // Mapping to track claimed status for each leaf in a Merkle tree of an Earndrop.
   // The first key (uint256) represents the `earndropId`.
   // The second key (uint256) represents the `leafIndex` in the Merkle tree.
   // The value (bool) indicates whether the specific leaf has been claimed (true if claimed, false otherwise).
-  mapping(uint256 => mapping(uint256 => bool)) private claimed;
+  mapping(uint256 id => mapping(uint256 leafIndex => bool claimed)) private claimed;
 
   event EarndropActivated(
     uint256 earndropId, address tokenAddress, bytes32 merkleTreeRoot, uint256 totalAmount, Stage[] stages, address admin

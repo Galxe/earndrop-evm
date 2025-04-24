@@ -130,7 +130,7 @@ contract VestingEarndropTest is Test {
 
     vestingEarndrop.transferEarndropAdmin(earndropId, newAdmin);
 
-    (,,,, address admin,,,,) = vestingEarndrop.earndrops(earndropId);
+    (,,,,,address admin,,,) = vestingEarndrop.earndrops(earndropId);
     assertEq(admin, newAdmin);
   }
 
@@ -315,7 +315,7 @@ contract VestingEarndropTest is Test {
 
     vestingEarndrop.activateEarndrop(earndropId, tokenAddress, admin, merkleTreeRoot, totalAmount, stages, signature);
 
-    (,,,, address earndropAdmin,,,,) = vestingEarndrop.earndrops(earndropId);
+    (,,,,,address earndropAdmin,,,) = vestingEarndrop.earndrops(earndropId);
     assertEq(earndropAdmin, admin);
 
     VestingEarndrop.Stage[] memory earndropStages = vestingEarndrop.getEarndropStages(earndropId);
