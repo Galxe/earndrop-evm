@@ -13,3 +13,5 @@ docs/
 lcov.info
 
 .idea/
+
+/node_modules
