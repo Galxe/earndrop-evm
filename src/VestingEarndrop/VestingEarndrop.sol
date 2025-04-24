@@ -35,21 +35,21 @@ contract VestingEarndrop is Ownable2Step, EIP712 {
   error TransferFailed();
 
   struct Stage {
-    uint256 startTime;
-    uint256 endTime;
+    uint48 startTime;
+    uint48 endTime;
   }
 
   struct Earndrop {
+    uint256 totalAmount;
+    uint256 claimedAmount;
+    bytes32 merkleTreeRoot;
     address tokenAddress;
     uint96 earndropId;
+    address admin;
     bool revoked;
     bool revocable;
     bool confirmed;
-    bytes32 merkleTreeRoot;
-    uint256 totalAmount;
-    uint256 claimedAmount;
     Stage[] stages;
-    address admin;
   }
 
   struct ClaimParams {
@@ -62,8 +62,13 @@ contract VestingEarndrop is Ownable2Step, EIP712 {
 
   address public signer;
   address public treasurer;
-  mapping(uint256 => Earndrop) public earndrops;
-  mapping(uint256 => mapping(uint256 => bool)) private claimed;
+  mapping(uint256 id => Earndrop earndrop) public earndrops;
+
+  // Mapping to track claimed status for each leaf in a Merkle tree of an Earndrop.
+  // The first key (uint256) represents the `earndropId`.
+  // The second key (uint256) represents the `leafIndex` in the Merkle tree.
+  // The value (bool) indicates whether the specific leaf has been claimed (true if claimed, false otherwise).
+  mapping(uint256 id => mapping(uint256 leafIndex => bool claimed)) private claimed;
 
   event EarndropActivated(
     uint256 earndropId, address tokenAddress, bytes32 merkleTreeRoot, uint256 totalAmount, Stage[] stages, address admin
@@ -119,14 +124,13 @@ contract VestingEarndrop is Ownable2Step, EIP712 {
    * @param earndropId The unique ID of the Earndrop.
    * @param revocable The boolean flag indicating if the Earndrop is revocable.
    */
-  function setEarndropRevocable(uint256 earndropId, bool revocable) external onlyOwner {
+  function setEarndropRevocable(uint256 earndropId, bool revocable)
+    external
+    onlyOwner
+    earndropExists(earndropId)
+    notRevoked(earndropId)
+  {
     Earndrop storage earndrop = earndrops[earndropId];
-    if (earndrop.earndropId == 0) {
-      revert InvalidParameter("Earndrop does not exist");
-    }
-    if (earndrop.revoked) {
-      revert InvalidParameter("Earndrop already revoked");
-    }
 
     earndrop.revocable = revocable;
 
@@ -194,19 +198,17 @@ contract VestingEarndrop is Ownable2Step, EIP712 {
    * @dev Confirms the activation of an Earndrop by transferring tokens.
    * @param earndropId The unique ID of the Earndrop.
    */
-  function confirmActivateEarndrop(uint256 earndropId) external payable {
+  function confirmActivateEarndrop(uint256 earndropId)
+    external
+    payable
+    earndropExists(earndropId)
+    notRevoked(earndropId)
+    onlyAdmin(earndropId)
+  {
     Earndrop storage earndrop = earndrops[earndropId];
-    if (earndrop.earndropId == 0) {
-      revert InvalidParameter("Earndrop does not exist");
-    }
-    if (earndrop.revoked) {
-      revert InvalidParameter("Earndrop revoked");
-    }
+
     if (earndrop.confirmed) {
       revert InvalidParameter("Earndrop already confirmed");
-    }
-    if (msg.sender != earndrop.admin) {
-      revert Unauthorized();
     }
 
     if (earndrop.tokenAddress == address(0)) {
@@ -231,14 +233,13 @@ contract VestingEarndrop is Ownable2Step, EIP712 {
    * @param earndropId The unique ID of the Earndrop.
    * @param newAdmin The address of the new admin.
    */
-  function transferEarndropAdmin(uint256 earndropId, address newAdmin) external {
+  function transferEarndropAdmin(uint256 earndropId, address newAdmin)
+    external
+    earndropExists(earndropId)
+    onlyAdmin(earndropId)
+  {
     Earndrop storage earndrop = earndrops[earndropId];
-    if (earndrop.earndropId == 0) {
-      revert InvalidParameter("Earndrop does not exist");
-    }
-    if (msg.sender != earndrop.admin) {
-      revert Unauthorized();
-    }
+
     if (newAdmin == address(0)) {
       revert InvalidParameter("New admin cannot be the zero address");
     }
@@ -253,23 +254,26 @@ contract VestingEarndrop is Ownable2Step, EIP712 {
    * @param earndropId The unique ID of the Earndrop.
    * @param recipient The address to receive the remaining tokens.
    */
-  function revokeEarndrop(uint256 earndropId, address recipient) external {
+  function revokeEarndrop(uint256 earndropId, address recipient)
+    external
+    earndropExists(earndropId)
+    notRevoked(earndropId)
+    onlyAdmin(earndropId)
+    isConfirmed(earndropId)
+  {
     Earndrop storage earndrop = earndrops[earndropId];
-    if (earndrop.earndropId == 0) {
-      revert InvalidParameter("Earndrop does not exist");
+
+    bool allStagesEnded = true;
+    for (uint256 i = 0; i < earndrop.stages.length; i++) {
+      if (earndrop.stages[i].endTime >= block.timestamp) {
+        allStagesEnded = false;
+        break;
+      }
     }
-    if (earndrop.revoked) {
-      revert InvalidParameter("Earndrop already revoked");
-    }
-    if (!earndrop.confirmed) {
-      revert InvalidParameter("Earndrop not confirmed");
-    }
-    if (!earndrop.revocable) {
+    if (!allStagesEnded && !earndrop.revocable) {
       revert InvalidParameter("Earndrop is not revocable");
     }
-    if (msg.sender != earndrop.admin) {
-      revert Unauthorized();
-    }
+
     if (recipient == address(0)) {
       revert InvalidParameter("Recipient cannot be the zero address");
     }
@@ -290,17 +294,15 @@ contract VestingEarndrop is Ownable2Step, EIP712 {
    * @param params The claim parameters including stageIndex, leafIndex, account, amount, and merkleProof.
    * @param _signature The signature for claim verification.
    */
-  function claimEarndrop(uint256 earndropId, ClaimParams calldata params, bytes calldata _signature) external payable {
+  function claimEarndrop(uint256 earndropId, ClaimParams calldata params, bytes calldata _signature)
+    external
+    payable
+    earndropExists(earndropId)
+    notRevoked(earndropId)
+    isConfirmed(earndropId)
+  {
     Earndrop storage earndrop = earndrops[earndropId];
-    if (earndrop.earndropId == 0) {
-      revert InvalidParameter("Earndrop does not exist");
-    }
-    if (!earndrop.confirmed) {
-      revert InvalidParameter("Earndrop not confirmed");
-    }
-    if (earndrop.revoked) {
-      revert InvalidParameter("Earndrop revoked");
-    }
+
     if (params.stageIndex >= earndrop.stages.length) {
       revert InvalidParameter("Invalid stage index");
     }
@@ -352,22 +354,15 @@ contract VestingEarndrop is Ownable2Step, EIP712 {
   function multiClaimEarndrop(uint256 earndropId, ClaimParams[] calldata params, bytes calldata signature)
     external
     payable
+    earndropExists(earndropId)
+    notRevoked(earndropId)
+    isConfirmed(earndropId)
   {
     if (params.length == 0) {
       revert InvalidParameter("Empty params");
     }
 
     Earndrop storage earndrop = earndrops[earndropId];
-
-    if (earndrop.earndropId == 0) {
-      revert InvalidParameter("Earndrop does not exist");
-    }
-    if (!earndrop.confirmed) {
-      revert InvalidParameter("Earndrop not confirmed");
-    }
-    if (earndrop.revoked) {
-      revert InvalidParameter("Earndrop revoked");
-    }
 
     bool isVerified = _verifySignature(_hashEarndropClaim(earndropId, params[0].leafIndex, msg.value), signature);
     if (!isVerified) {
@@ -531,5 +526,33 @@ contract VestingEarndrop is Ownable2Step, EIP712 {
 
   function _verifySignature(bytes32 _hash, bytes calldata _signature) private view returns (bool) {
     return ECDSA.recover(_hash, _signature) == signer;
+  }
+
+  modifier earndropExists(uint256 earndropId) {
+    if (earndrops[earndropId].earndropId == 0) {
+      revert InvalidParameter("Earndrop does not exist");
+    }
+    _;
+  }
+
+  modifier notRevoked(uint256 earndropId) {
+    if (earndrops[earndropId].revoked) {
+      revert InvalidParameter("Earndrop already revoked");
+    }
+    _;
+  }
+
+  modifier onlyAdmin(uint256 earndropId) {
+    if (msg.sender != earndrops[earndropId].admin) {
+      revert Unauthorized();
+    }
+    _;
+  }
+
+  modifier isConfirmed(uint256 earndropId) {
+    if (!earndrops[earndropId].confirmed) {
+      revert InvalidParameter("Earndrop not confirmed");
+    }
+    _;
   }
 }
