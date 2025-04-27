@@ -23,8 +23,9 @@ import "@openzeppelin-v5/contracts/token/ERC20/utils/SafeERC20.sol";
 import "@openzeppelin-v5/contracts/utils/cryptography/ECDSA.sol";
 import "@openzeppelin-v5/contracts/utils/cryptography/EIP712.sol";
 import "@openzeppelin-v5/contracts/utils/cryptography/MerkleProof.sol";
+import "@openzeppelin-v5/contracts/utils/ReentrancyGuard.sol";
 
-contract VestingEarndrop is Ownable2Step, EIP712 {
+contract VestingEarndrop is Ownable2Step, EIP712, ReentrancyGuard {
     using SafeERC20 for IERC20;
 
     struct Stage {
@@ -323,7 +324,7 @@ contract VestingEarndrop is Ownable2Step, EIP712 {
         uint256 earndropId,
         ClaimParams calldata params,
         bytes calldata _signature
-    ) external payable earndropExists(earndropId) notRevoked(earndropId) isConfirmed(earndropId) {
+    ) external payable nonReentrant earndropExists(earndropId) notRevoked(earndropId) isConfirmed(earndropId) {
         Earndrop storage earndrop = earndrops[earndropId];
 
         if (params.stageIndex >= earndrop.stages.length) {
@@ -379,7 +380,7 @@ contract VestingEarndrop is Ownable2Step, EIP712 {
         uint256 earndropId,
         ClaimParams[] calldata params,
         bytes calldata signature
-    ) external payable earndropExists(earndropId) notRevoked(earndropId) isConfirmed(earndropId) {
+    ) external payable nonReentrant earndropExists(earndropId) notRevoked(earndropId) isConfirmed(earndropId) {
         if (params.length == 0) {
             revert InvalidParameter("Empty params");
         }
