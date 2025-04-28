@@ -79,11 +79,12 @@ contract VestingEarndrop is Ownable2Step, EIP712, ReentrancyGuard {
         uint256 indexed stageIndex,
         uint256 leafIndex,
         address account,
-        uint256 amount,
-        uint256 value
+        uint256 amount
     );
     event EarndropAdminTransferred(uint256 earndropId, address indexed previousAdmin, address indexed newAdmin);
     event EarndropRevocableSet(uint256 earndropId, bool revocable);
+    event EarndropSetSigner(address newSigner);
+    event EarndropSetTreasurer(address newTreasurer);
 
     error InvalidAddress();
     error EarndropAlreadyExists();
@@ -141,6 +142,8 @@ contract VestingEarndrop is Ownable2Step, EIP712, ReentrancyGuard {
             revert InvalidAddress();
         }
         signer = _signer;
+        
+        emit EarndropSetSigner(_signer);
     }
 
     /**
@@ -152,6 +155,8 @@ contract VestingEarndrop is Ownable2Step, EIP712, ReentrancyGuard {
             revert InvalidAddress();
         }
         treasurer = _treasurer;
+
+        emit EarndropSetTreasurer(_treasurer);
     }
 
     /**
@@ -204,6 +209,10 @@ contract VestingEarndrop is Ownable2Step, EIP712, ReentrancyGuard {
 
         if (totalAmount == 0) {
             revert InvalidParameter("totalAmount cannot be 0");
+        }
+        
+        if (merkleTreeRoot == bytes32(0)) {
+            revert InvalidParameter("merkleTreeRoot cannot be zero");
         }
 
         _validateStages(_stagesArray);
@@ -367,7 +376,7 @@ contract VestingEarndrop is Ownable2Step, EIP712, ReentrancyGuard {
 
         _processTransfer(earndrop.tokenAddress, params.account, params.amount);
 
-        emit EarndropClaimed(earndropId, params.stageIndex, params.leafIndex, params.account, params.amount, msg.value);
+        emit EarndropClaimed(earndropId, params.stageIndex, params.leafIndex, params.account, params.amount);
     }
 
     /**
@@ -423,7 +432,7 @@ contract VestingEarndrop is Ownable2Step, EIP712, ReentrancyGuard {
 
             _processTransfer(earndrop.tokenAddress, claim.account, claim.amount);
 
-            emit EarndropClaimed(earndropId, claim.stageIndex, claim.leafIndex, claim.account, claim.amount, msg.value);
+            emit EarndropClaimed(earndropId, claim.stageIndex, claim.leafIndex, claim.account, claim.amount);
         }
 
         // transfer claimFee to treasurer

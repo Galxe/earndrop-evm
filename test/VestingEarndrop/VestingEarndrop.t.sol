@@ -209,6 +209,21 @@ contract VestingEarndropTest is Test {
     vestingEarndrop.activateEarndrop(earndropId, tokenAddress, admin, merkleTreeRoot, totalAmount, stages, signature);
   }
 
+
+  function testActivateEarndropWithZeroMerkleTreeRoot() public {
+    uint256 earndropId = 1;
+    address tokenAddress = address(0);
+    address admin = makeAddr("admin");
+    bytes32 merkleTreeRoot = bytes32(0);
+    uint256 totalAmount = 1 ether;
+    VestingEarndrop.Stage[] memory stages = new VestingEarndrop.Stage[](1);
+    stages[0] =
+      VestingEarndrop.Stage({startTime: uint48(block.timestamp + 3600), endTime: uint48(block.timestamp + 7200)});
+    bytes memory signature = "";
+    vm.expectRevert(abi.encodeWithSelector(VestingEarndrop.InvalidParameter.selector, "merkleTreeRoot cannot be zero"));
+    vestingEarndrop.activateEarndrop(earndropId, tokenAddress, admin, merkleTreeRoot, totalAmount, stages, signature);
+  }
+
   function testActivateEarndropWithInvalidStageLength() public {
     uint256 earndropId = 1;
     address tokenAddress = address(0);
