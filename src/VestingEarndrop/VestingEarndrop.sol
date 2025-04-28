@@ -211,6 +211,10 @@ contract VestingEarndrop is Ownable2Step, EIP712, ReentrancyGuard {
         if (totalAmount == 0) {
             revert InvalidParameter("totalAmount cannot be 0");
         }
+        
+        if (merkleTreeRoot == bytes32(0)) {
+            revert InvalidParameter("merkleTreeRoot cannot be zero");
+        }
 
         _validateStages(_stagesArray);
 
