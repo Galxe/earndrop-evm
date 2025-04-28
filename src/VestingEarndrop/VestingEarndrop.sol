@@ -84,6 +84,8 @@ contract VestingEarndrop is Ownable2Step, EIP712, ReentrancyGuard {
     );
     event EarndropAdminTransferred(uint256 earndropId, address indexed previousAdmin, address indexed newAdmin);
     event EarndropRevocableSet(uint256 earndropId, bool revocable);
+    event EarndropSetSigner(address newSigner);
+    event EarndropSetTreasurer(address newTreasurer);
 
     error InvalidAddress();
     error EarndropAlreadyExists();
@@ -141,6 +143,8 @@ contract VestingEarndrop is Ownable2Step, EIP712, ReentrancyGuard {
             revert InvalidAddress();
         }
         signer = _signer;
+        
+        emit EarndropSetSigner(_signer);
     }
 
     /**
@@ -152,6 +156,8 @@ contract VestingEarndrop is Ownable2Step, EIP712, ReentrancyGuard {
             revert InvalidAddress();
         }
         treasurer = _treasurer;
+
+        emit EarndropSetTreasurer(_treasurer);
     }
 
     /**
