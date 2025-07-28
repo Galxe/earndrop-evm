@@ -93,7 +93,7 @@ contract VestingEarndropTest is Test {
     vm.prank(owner);
     vestingEarndrop.setEarndropRevocable(earndropId, true);
 
-    (,,,,,,, bool revocable,) = vestingEarndrop.earndrops(earndropId);
+    (,,,,,,,, bool revocable,) = vestingEarndrop.earndrops(earndropId);
     assertTrue(revocable, "Earndrop should be revocable");
   }
 
@@ -130,7 +130,7 @@ contract VestingEarndropTest is Test {
 
     vestingEarndrop.transferEarndropAdmin(earndropId, newAdmin);
 
-    (,,,,,address admin,,,) = vestingEarndrop.earndrops(earndropId);
+    (,,,,,, address admin,,,) = vestingEarndrop.earndrops(earndropId);
     assertEq(admin, newAdmin);
   }
 
@@ -208,7 +208,6 @@ contract VestingEarndropTest is Test {
     vm.expectRevert(abi.encodeWithSelector(VestingEarndrop.InvalidParameter.selector, "totalAmount cannot be 0"));
     vestingEarndrop.activateEarndrop(earndropId, tokenAddress, admin, merkleTreeRoot, totalAmount, stages, signature);
   }
-
 
   function testActivateEarndropWithZeroMerkleTreeRoot() public {
     uint256 earndropId = 1;
@@ -330,7 +329,7 @@ contract VestingEarndropTest is Test {
 
     vestingEarndrop.activateEarndrop(earndropId, tokenAddress, admin, merkleTreeRoot, totalAmount, stages, signature);
 
-    (,,,,,address earndropAdmin,,,) = vestingEarndrop.earndrops(earndropId);
+    (,,,,,, address earndropAdmin,,,) = vestingEarndrop.earndrops(earndropId);
     assertEq(earndropAdmin, admin);
 
     VestingEarndrop.Stage[] memory earndropStages = vestingEarndrop.getEarndropStages(earndropId);
@@ -371,7 +370,7 @@ contract VestingEarndropTest is Test {
     vm.prank(admin);
     vestingEarndrop.confirmActivateEarndrop(earndropId);
 
-    (,,,,,,,, bool confirmed) = vestingEarndrop.earndrops(earndropId);
+    (,,,,,,,,, bool confirmed) = vestingEarndrop.earndrops(earndropId);
     assertTrue(confirmed, "Earndrop should be confirmed");
     assertEq(token.balanceOf(address(vestingEarndrop)), totalAmount, "Contract should hold the total amount of tokens");
   }
@@ -503,7 +502,7 @@ contract VestingEarndropTest is Test {
     vm.prank(admin);
     vestingEarndrop.revokeEarndrop(earndropId, recipient);
 
-    (,,,,,, bool revoked,,) = vestingEarndrop.earndrops(earndropId);
+    (,,,,,,, bool revoked,,) = vestingEarndrop.earndrops(earndropId);
     assertTrue(revoked, "Earndrop should be revoked");
     assertEq(token.balanceOf(recipient), totalAmount, "Recipient should receive the remaining tokens");
   }
@@ -553,7 +552,7 @@ contract VestingEarndropTest is Test {
 
     vestingEarndrop.revokeEarndrop(earndropId, recipient);
 
-    (,,,,,, bool revoked,,) = vestingEarndrop.earndrops(earndropId);
+    (,,,,,,, bool revoked,,) = vestingEarndrop.earndrops(earndropId);
     assertTrue(revoked, "Earndrop should be revoked");
   }
 
@@ -971,6 +970,202 @@ contract VestingEarndropTest is Test {
     );
   }
 
+  function testClaimEarndropWithClaimFee() public {
+    uint256 earndropId = 1;
+    address tokenAddress = address(token);
+    uint256 totalAmount = 3 ether;
+    uint256 stageIndex = 0;
+    address admin = makeAddr("admin");
+    address claimer = address(this);
+    uint256 claimFee = 0.01 ether;
+    vm.deal(claimer, 1 ether);
+
+    VestingEarndrop.Stage[] memory stages = new VestingEarndrop.Stage[](1);
+    stages[0] =
+      VestingEarndrop.Stage({startTime: uint48(block.timestamp + 3600), endTime: uint48(block.timestamp + 7200)});
+
+    token.mint(admin, totalAmount);
+    vm.prank(admin);
+    token.approve(address(vestingEarndrop), totalAmount);
+
+    uint256 leafIndex = 0;
+    uint256 claimAmount = 1 ether;
+    (bytes32 merkleTreeRoot, bytes32[] memory merkleProof) =
+      _generateMerkleTreeAndProof(earndropId, stageIndex, leafIndex, claimer, claimAmount);
+
+    bytes32 activationHash = _hashEarndropActivate(earndropId, tokenAddress, merkleTreeRoot, totalAmount, stages, admin);
+    (uint8 v, bytes32 r, bytes32 s) = vm.sign(signerKey, activationHash);
+    bytes memory activationSignature = abi.encodePacked(r, s, v);
+
+    vestingEarndrop.activateEarndrop(
+      earndropId, tokenAddress, admin, merkleTreeRoot, totalAmount, stages, activationSignature
+    );
+
+    vm.prank(admin);
+    vestingEarndrop.confirmActivateEarndrop(earndropId);
+
+    vm.warp(block.timestamp + 3700);
+
+    uint256 treasurerBalanceBefore = address(treasurer).balance;
+
+    bytes32 claimHash = _hashEarndropClaim(earndropId, leafIndex, claimFee);
+    (v, r, s) = vm.sign(signerKey, claimHash);
+    bytes memory claimSignature = abi.encodePacked(r, s, v);
+
+    vm.expectEmit(true, true, true, true);
+    emit VestingEarndrop.EarndropClaimFee(earndropId, claimer, claimFee);
+
+    vestingEarndrop.claimEarndrop{value: claimFee}(
+      earndropId,
+      VestingEarndrop.ClaimParams({
+        stageIndex: stageIndex,
+        leafIndex: leafIndex,
+        account: claimer,
+        amount: claimAmount,
+        merkleProof: merkleProof
+      }),
+      claimSignature
+    );
+
+    assertTrue(vestingEarndrop.isClaimed(earndropId, leafIndex));
+    assertEq(token.balanceOf(claimer), claimAmount);
+    assertEq(address(treasurer).balance, treasurerBalanceBefore + claimFee);
+
+    // Verify claimFee is updated in the earndrop
+    (,, uint256 claimFeeAmount,,,,,,,) = vestingEarndrop.earndrops(earndropId);
+    assertEq(claimFeeAmount, claimFee, "claimFee should be updated");
+  }
+
+  function testMultiClaimEarndropWithClaimFee() public {
+    uint256 earndropId = 1;
+    address tokenAddress = address(token);
+    uint256 totalAmount = 3 ether;
+    uint256 stageIndex = 0;
+    address admin = makeAddr("admin");
+    address claimer = address(this);
+    uint256 claimFee = 0.02 ether;
+    vm.deal(claimer, 1 ether);
+
+    VestingEarndrop.Stage[] memory stages = new VestingEarndrop.Stage[](1);
+    stages[0] =
+      VestingEarndrop.Stage({startTime: uint48(block.timestamp + 3600), endTime: uint48(block.timestamp + 7200)});
+
+    token.mint(admin, totalAmount);
+    vm.prank(admin);
+    token.approve(address(vestingEarndrop), totalAmount);
+
+    uint256 leafIndex = 0;
+    uint256 claimAmount = 1 ether;
+    (bytes32 merkleTreeRoot, bytes32[] memory merkleProof) =
+      _generateMerkleTreeAndProof(earndropId, stageIndex, leafIndex, claimer, claimAmount);
+
+    bytes32 activationHash = _hashEarndropActivate(earndropId, tokenAddress, merkleTreeRoot, totalAmount, stages, admin);
+    (uint8 v, bytes32 r, bytes32 s) = vm.sign(signerKey, activationHash);
+    bytes memory activationSignature = abi.encodePacked(r, s, v);
+
+    vestingEarndrop.activateEarndrop(
+      earndropId, tokenAddress, admin, merkleTreeRoot, totalAmount, stages, activationSignature
+    );
+
+    vm.prank(admin);
+    vestingEarndrop.confirmActivateEarndrop(earndropId);
+
+    vm.warp(block.timestamp + 3700);
+
+    uint256 treasurerBalanceBefore = address(treasurer).balance;
+
+    VestingEarndrop.ClaimParams[] memory claimParams = new VestingEarndrop.ClaimParams[](1);
+
+    claimParams[0] = VestingEarndrop.ClaimParams({
+      stageIndex: stageIndex,
+      leafIndex: leafIndex,
+      account: claimer,
+      amount: claimAmount,
+      merkleProof: merkleProof
+    });
+
+    bytes32 claimHash = _hashEarndropClaim(earndropId, claimParams[0].leafIndex, claimFee);
+    (v, r, s) = vm.sign(signerKey, claimHash);
+    bytes memory claimSignature = abi.encodePacked(r, s, v);
+
+    vm.expectEmit(true, true, true, true);
+    emit VestingEarndrop.EarndropClaimFee(earndropId, claimer, claimFee);
+
+    vestingEarndrop.multiClaimEarndrop{value: claimFee}(earndropId, claimParams, claimSignature);
+
+    assertTrue(vestingEarndrop.isClaimed(earndropId, leafIndex));
+    assertEq(token.balanceOf(claimer), claimAmount);
+    assertEq(address(treasurer).balance, treasurerBalanceBefore + claimFee);
+
+    // Verify claimFee is updated in the earndrop
+    (,, uint256 claimFeeAmount,,,,,,,) = vestingEarndrop.earndrops(earndropId);
+    assertEq(claimFeeAmount, claimFee, "claimFee should be updated");
+  }
+
+  function testClaimEarndropWithoutClaimFee() public {
+    uint256 earndropId = 1;
+    address tokenAddress = address(token);
+    uint256 totalAmount = 3 ether;
+    uint256 stageIndex = 0;
+    address admin = makeAddr("admin");
+    address claimer = address(this);
+    uint256 claimFee = 0;
+    vm.deal(claimer, 1 ether);
+
+    VestingEarndrop.Stage[] memory stages = new VestingEarndrop.Stage[](1);
+    stages[0] =
+      VestingEarndrop.Stage({startTime: uint48(block.timestamp + 3600), endTime: uint48(block.timestamp + 7200)});
+
+    token.mint(admin, totalAmount);
+    vm.prank(admin);
+    token.approve(address(vestingEarndrop), totalAmount);
+
+    uint256 leafIndex = 0;
+    uint256 claimAmount = 1 ether;
+    (bytes32 merkleTreeRoot, bytes32[] memory merkleProof) =
+      _generateMerkleTreeAndProof(earndropId, stageIndex, leafIndex, claimer, claimAmount);
+
+    bytes32 activationHash = _hashEarndropActivate(earndropId, tokenAddress, merkleTreeRoot, totalAmount, stages, admin);
+    (uint8 v, bytes32 r, bytes32 s) = vm.sign(signerKey, activationHash);
+    bytes memory activationSignature = abi.encodePacked(r, s, v);
+
+    vestingEarndrop.activateEarndrop(
+      earndropId, tokenAddress, admin, merkleTreeRoot, totalAmount, stages, activationSignature
+    );
+
+    vm.prank(admin);
+    vestingEarndrop.confirmActivateEarndrop(earndropId);
+
+    vm.warp(block.timestamp + 3700);
+
+    uint256 treasurerBalanceBefore = address(treasurer).balance;
+
+    bytes32 claimHash = _hashEarndropClaim(earndropId, leafIndex, claimFee);
+    (v, r, s) = vm.sign(signerKey, claimHash);
+    bytes memory claimSignature = abi.encodePacked(r, s, v);
+
+    // Should not emit EarndropClaimFee event when claimFee is 0
+    vestingEarndrop.claimEarndrop{value: claimFee}(
+      earndropId,
+      VestingEarndrop.ClaimParams({
+        stageIndex: stageIndex,
+        leafIndex: leafIndex,
+        account: claimer,
+        amount: claimAmount,
+        merkleProof: merkleProof
+      }),
+      claimSignature
+    );
+
+    assertTrue(vestingEarndrop.isClaimed(earndropId, leafIndex));
+    assertEq(token.balanceOf(claimer), claimAmount);
+    assertEq(address(treasurer).balance, treasurerBalanceBefore);
+
+    // Verify claimFee remains 0 in the earndrop
+    (,, uint256 claimFeeAmount,,,,,,,) = vestingEarndrop.earndrops(earndropId);
+    assertEq(claimFeeAmount, 0, "claimFee should remain 0");
+  }
+
   function _setupEarndrop(uint256 earndropId, address admin, address _token) private {
     VestingEarndrop.Stage[] memory stages = new VestingEarndrop.Stage[](1);
     stages[0] =
@@ -998,7 +1193,8 @@ contract VestingEarndropTest is Test {
     leaves[0] = keccak256(abi.encodePacked(earndropId, stageIndex, leafIndex, account, amount));
     leaves[1] = keccak256(abi.encodePacked(earndropId, stageIndex, leafIndex + 1, account, amount));
 
-    merkleRoot = keccak256(abi.encodePacked(leaves[0], leaves[1]));
+    (bytes32 left, bytes32 right) = leaves[0] < leaves[1] ? (leaves[0], leaves[1]) : (leaves[1], leaves[0]);
+    merkleRoot = keccak256(abi.encodePacked(left, right));
 
     merkleProof = new bytes32[](1);
     merkleProof[0] = leaves[1];
