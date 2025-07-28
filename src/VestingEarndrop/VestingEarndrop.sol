@@ -36,6 +36,7 @@ contract VestingEarndrop is Ownable2Step, EIP712, ReentrancyGuard {
     struct Earndrop {
         uint256 totalAmount;
         uint256 claimedAmount;
+        uint256 claimFee;
         bytes32 merkleTreeRoot;
         address tokenAddress;
         uint96 earndropId;
@@ -85,6 +86,11 @@ contract VestingEarndrop is Ownable2Step, EIP712, ReentrancyGuard {
     event EarndropRevocableSet(uint256 earndropId, bool revocable);
     event EarndropSetSigner(address newSigner);
     event EarndropSetTreasurer(address newTreasurer);
+    event EarndropClaimFee(
+        uint256 indexed earndropId,
+        address indexed account,
+        uint256 claimFeeAmount
+    );
 
     error InvalidAddress();
     error EarndropAlreadyExists();
@@ -372,6 +378,8 @@ contract VestingEarndrop is Ownable2Step, EIP712, ReentrancyGuard {
             if (!success) {
                 revert TransferFailed();
             }
+            earndrop.claimFee += msg.value;
+            emit EarndropClaimFee(earndropId, params.account, msg.value);
         }
 
         _processTransfer(earndrop.tokenAddress, params.account, params.amount);
@@ -441,6 +449,8 @@ contract VestingEarndrop is Ownable2Step, EIP712, ReentrancyGuard {
             if (!success) {
                 revert TransferFailed();
             }
+            earndrop.claimFee += msg.value;
+            emit EarndropClaimFee(earndropId, params[0].account, msg.value);
         }
     }
 
